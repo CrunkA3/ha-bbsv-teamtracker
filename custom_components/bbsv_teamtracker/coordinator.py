@@ -104,7 +104,7 @@ def _parse_table(html: str) -> list[dict]:
                     entry["position"] = None
             elif key == "team":
                 entry["team"] = value
-            elif key == "goals":
+            elif key == "ergebnis":
                 # Format may be "25:10" or "25-10"
                 if ":" in value:
                     parts = value.split(":", 1)
