@@ -78,7 +78,7 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_LEAGUE_ID): str,
-                vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
+                vol.Optional(CONF_NAME): str,
             }
         )
         return self.async_show_form(
