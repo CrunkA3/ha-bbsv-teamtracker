@@ -63,8 +63,7 @@ class BBSVLeagueTableSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], Senso
         super().__init__(coordinator)
         league_id = coordinator.league_id
         self._attr_unique_id = f"{DOMAIN}_{league_id}_table"
-        user_name: str = entry.data.get(CONF_NAME, DEFAULT_NAME)
-        self._attr_name = user_name
+        self._attr_name = "League Table"
         self._attr_device_info = _device_info(coordinator, entry)
 
     @property
