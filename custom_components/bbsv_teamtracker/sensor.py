@@ -42,7 +42,6 @@ class BBSVLeagueTableSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], Senso
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._entry = entry
         league_id = coordinator.league_id
         self._attr_unique_id = f"{DOMAIN}_{league_id}_table"
         user_name: str = entry.data.get(CONF_NAME, DEFAULT_NAME)

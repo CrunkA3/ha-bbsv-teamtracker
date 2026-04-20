@@ -75,12 +75,14 @@ After the integration is set up you can adjust the **update interval** (minimum 
 
 ## Example template sensor (leader)
 
+Replace `sensor.bbsv_teamtracker` with your actual league table sensor entity_id.
+
 ```yaml
 template:
   - sensor:
       - name: "BBSV Table Leader"
         state: >
-          {% set table = state_attr('sensor.bbsv_teamtracker', 'table') %}
+          {% set table = state_attr('sensor.your_league_table_entity_id', 'table') %}
           {% if table %}{{ table[0]['team'] }}{% else %}unknown{% endif %}
 ```
 
