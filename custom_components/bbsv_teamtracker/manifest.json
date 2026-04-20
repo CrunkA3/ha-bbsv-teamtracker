@@ -1,0 +1,11 @@
+{
+  "domain": "bbsv_teamtracker",
+  "name": "BBSV Teamtracker",
+  "version": "1.0.0",
+  "config_flow": true,
+  "documentation": "https://github.com/CrunkA3/ha-bbsv-teamtracker",
+  "issue_tracker": "https://github.com/CrunkA3/ha-bbsv-teamtracker/issues",
+  "requirements": [],
+  "codeowners": ["@CrunkA3"],
+  "iot_class": "cloud_polling"
+}
