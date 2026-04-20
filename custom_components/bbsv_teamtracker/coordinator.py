@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -95,6 +95,7 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
             CONF_SCAN_INTERVAL,
             entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         )
+        self.last_updated: datetime | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -132,4 +133,5 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
                 "(no completed matches found)",
                 self._league_id,
             )
+        self.last_updated = datetime.now(timezone.utc)
         return standings
