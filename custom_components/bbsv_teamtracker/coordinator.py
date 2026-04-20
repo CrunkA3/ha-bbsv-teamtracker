@@ -78,7 +78,7 @@ def _compute_standings(matches: list[dict]) -> list[dict]:
         entry["points"] = entry["wins"] * 2
         table.append(entry)
 
-    table.sort(key=lambda e: (-e["points"], -e["run_diff"]))
+    table.sort(key=lambda e: (-e["points"], -e["run_diff"], -e["runs_for"], e["team"]))
     for position, entry in enumerate(table, 1):
         entry["position"] = position
 
