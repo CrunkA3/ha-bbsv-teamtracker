@@ -150,7 +150,7 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
     """Coordinator that fetches and parses the BBSV league table."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialise the coordinator."""
+        """Initialize the coordinator."""
         self._league_id: str = entry.data[CONF_LEAGUE_ID]
         scan_interval: int = entry.options.get(
             CONF_SCAN_INTERVAL,

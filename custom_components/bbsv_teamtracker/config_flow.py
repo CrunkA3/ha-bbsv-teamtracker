@@ -96,7 +96,7 @@ class BBSVTeamtrackerOptionsFlow(OptionsFlow):
     """Handle options (e.g. update interval) for an existing entry."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialise options flow."""
+        """Initialize options flow."""
         self._config_entry = config_entry
 
     async def async_step_init(
