@@ -66,9 +66,11 @@ def _compute_standings(matches: list[dict]) -> list[dict]:
         if home_runs > away_runs:
             standings[home_name]["wins"] += 1
             standings[away_name]["losses"] += 1
-        else:
+        elif away_runs > home_runs:
             standings[away_name]["wins"] += 1
             standings[home_name]["losses"] += 1
+        # Tied games (e.g. called due to weather) count towards games played
+        # but award no win, no loss, and no points to either side.
 
     table: list[dict] = []
     for entry in standings.values():
