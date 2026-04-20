@@ -32,7 +32,7 @@ HEADER_MAP: dict[str, str] = {
     "unentschieden": "draws",
     "n": "losses",
     "niederlagen": "losses",
-    "tore": "goals",
+    "tore": "runs",
     "diff": "goal_diff",
     "td": "goal_diff",
     "torunterschied": "goal_diff",

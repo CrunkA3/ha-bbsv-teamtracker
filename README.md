@@ -64,8 +64,8 @@ Copy the numeric value after `bsm_league=`.
 | `wins` | Wins |
 | `draws` | Draws |
 | `losses` | Losses |
-| `goals_for` | Goals scored |
-| `goals_against` | Goals conceded |
+| `runs_for` | Runs scored |
+| `runs_against` | Runs conceded |
 | `goal_diff` | Goal difference |
 | `points` | Points |
 

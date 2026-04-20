@@ -27,7 +27,7 @@ def _parse_table(html: str) -> list[dict]:
     """Parse the league table from the BBSV HTML page.
 
     Returns a list of dicts, one per team row, with canonical keys:
-    position, team, games, wins, draws, losses, goals_for, goals_against,
+    position, team, games, wins, draws, losses, runs_for, runs_against,
     goal_diff, points.
     """
     soup = BeautifulSoup(html, "html.parser")
@@ -70,11 +70,11 @@ def _parse_table(html: str) -> list[dict]:
 
     # If we couldn't detect headers, assume a common column order:
     # 0=position, 1=team, 2=games, 3=wins, 4=draws, 5=losses,
-    # 6=goals, 7=goal_diff, 8=points
+    # 6=runs, 7=goal_diff, 8=points
     if not col_map:
         for idx, key in enumerate(
             ["position", "team", "games", "wins", "draws", "losses",
-             "goals", "goal_diff", "points"]
+             "runs", "goal_diff", "points"]
         ):
             col_map[idx] = key
 
@@ -104,7 +104,7 @@ def _parse_table(html: str) -> list[dict]:
                     entry["position"] = None
             elif key == "team":
                 entry["team"] = value
-            elif key == "ergebnis":
+            elif key == "runs":
                 # Format may be "25:10" or "25-10"
                 if ":" in value:
                     parts = value.split(":", 1)
@@ -113,11 +113,11 @@ def _parse_table(html: str) -> list[dict]:
                 else:
                     parts = [value, "0"]
                 try:
-                    entry["goals_for"] = int(parts[0])
-                    entry["goals_against"] = int(parts[1])
+                    entry["runs_for"] = int(parts[0])
+                    entry["runs_against"] = int(parts[1])
                 except (ValueError, IndexError):
-                    entry["goals_for"] = 0
-                    entry["goals_against"] = 0
+                    entry["runs_for"] = 0
+                    entry["runs_against"] = 0
             elif key == "goal_diff":
                 try:
                     entry["goal_diff"] = int(value.replace("+", ""))
@@ -132,14 +132,14 @@ def _parse_table(html: str) -> list[dict]:
 
         # Only add rows that have at minimum a team name.
         if entry.get("team"):
-            # Derive goal_diff from goals if not provided by its own column.
-            if "goal_diff" not in entry and "goals_for" in entry and "goals_against" in entry:
-                goals_for = entry.get("goals_for") or 0
-                goals_against = entry.get("goals_against") or 0
-                entry["goal_diff"] = goals_for - goals_against
+            # Derive goal_diff from runs if not provided by its own column.
+            if "goal_diff" not in entry and "runs_for" in entry and "runs_against" in entry:
+                runs_for = entry.get("runs_for") or 0
+                runs_against = entry.get("runs_against") or 0
+                entry["goal_diff"] = runs_for - runs_against
             # Fill missing numeric fields with None to keep schema stable.
             for field in ("position", "games", "wins", "draws", "losses",
-                          "goals_for", "goals_against", "goal_diff", "points"):
+                          "runs_for", "runs_against", "goal_diff", "points"):
                 entry.setdefault(field, None)
             teams.append(entry)
 
