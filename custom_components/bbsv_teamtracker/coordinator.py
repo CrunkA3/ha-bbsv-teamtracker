@@ -20,17 +20,22 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _compute_standings(matches: list[dict]) -> list[dict]:
+def _compute_standings(matches: list[dict]) -> tuple[list[dict], int, int]:
     """Compute a standings table from a list of BSM match dicts.
 
     Only matches where both ``home_runs`` and ``away_runs`` are numeric values
     (i.e. the game has been played and scored) are counted.
 
-    Returns a list of team dicts with canonical keys:
-    position, team, games, wins, losses, runs_for, runs_against, run_diff,
-    points – sorted by points (desc) then run_diff (desc).
+    Returns a tuple of:
+    - list of team dicts with canonical keys:
+      position, team, games, wins, losses, runs_for, runs_against, run_diff,
+      points – sorted by points (desc) then run_diff (desc).
+    - total home runs across all completed matches
+    - total away runs across all completed matches
     """
     standings: dict[str, dict] = {}
+    total_home_runs: int = 0
+    total_away_runs: int = 0
 
     for match in matches:
         home_runs = match.get("home_runs")
@@ -44,6 +49,9 @@ def _compute_standings(matches: list[dict]) -> list[dict]:
         away_name: str = match.get("away_team_name") or ""
         if not home_name or not away_name:
             continue
+
+        total_home_runs += int(home_runs)
+        total_away_runs += int(away_runs)
 
         for name in (home_name, away_name):
             if name not in standings:
@@ -82,7 +90,7 @@ def _compute_standings(matches: list[dict]) -> list[dict]:
     for position, entry in enumerate(table, 1):
         entry["position"] = position
 
-    return table
+    return table, total_home_runs, total_away_runs
 
 
 class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
@@ -96,6 +104,8 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
             entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         )
         self.last_updated: datetime | None = None
+        self.total_home_runs: int = 0
+        self.total_away_runs: int = 0
         super().__init__(
             hass,
             _LOGGER,
@@ -126,12 +136,14 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
                 f"Unexpected response format from BSM API for league {self._league_id}"
             )
 
-        standings = _compute_standings(matches)
+        standings, total_home_runs, total_away_runs = _compute_standings(matches)
         if not standings:
             _LOGGER.warning(
                 "No standings could be computed for BSM league %s "
                 "(no completed matches found)",
                 self._league_id,
             )
+        self.total_home_runs = total_home_runs
+        self.total_away_runs = total_away_runs
         self.last_updated = datetime.now(timezone.utc)
         return standings
