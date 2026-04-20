@@ -4,150 +4,87 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from bs4 import BeautifulSoup
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
-    BASE_URL,
+    API_URL,
     CONF_LEAGUE_ID,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    HEADER_MAP,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _parse_table(html: str) -> list[dict]:
-    """Parse the league table from the BBSV HTML page.
+def _compute_standings(matches: list[dict]) -> list[dict]:
+    """Compute a standings table from a list of BSM match dicts.
 
-    Returns a list of dicts, one per team row, with canonical keys:
-    position, team, games, wins, draws, losses, runs_for, runs_against,
-    goal_diff, points.
+    Only matches where both ``home_runs`` and ``away_runs`` are numeric values
+    (i.e. the game has been played and scored) are counted.
+
+    Returns a list of team dicts with canonical keys:
+    position, team, games, wins, losses, runs_for, runs_against, run_diff,
+    points – sorted by points (desc) then run_diff (desc).
     """
-    soup = BeautifulSoup(html, "html.parser")
+    standings: dict[str, dict] = {}
 
-    # Find the main league table – prefer a table that contains "tabelle" in
-    # its class attribute, otherwise fall back to the first <table>.
-    table = None
-    for tbl in soup.find_all("table"):
-        classes = " ".join(tbl.get("class", [])).lower()
-        if "tabelle" in classes or "league" in classes or "standings" in classes:
-            table = tbl
-            break
-    if table is None:
-        table = soup.find("table")
-    if table is None:
-        _LOGGER.warning("No table found on BBSV page")
-        return []
+    for match in matches:
+        home_runs = match.get("home_runs")
+        away_runs = match.get("away_runs")
 
-    # Detect header row to build a column index map.
-    col_map: dict[int, str] = {}
-    thead = table.find("thead")
-    header_row = None
-    skip_first_row = False
-
-    if thead:
-        header_row = thead.find("tr")
-    else:
-        # Only treat the first row as a header when it contains <th> elements.
-        first_row = table.find("tr")
-        if first_row and first_row.find("th"):
-            header_row = first_row
-            skip_first_row = True
-
-    if header_row:
-        for idx, th in enumerate(header_row.find_all(["th", "td"])):
-            raw = th.get_text(strip=True).lower()
-            canonical = HEADER_MAP.get(raw)
-            if canonical:
-                col_map[idx] = canonical
-
-    # If we couldn't detect headers, assume a common column order:
-    # 0=position, 1=team, 2=games, 3=wins, 4=draws, 5=losses,
-    # 6=runs, 7=goal_diff, 8=points
-    if not col_map:
-        for idx, key in enumerate(
-            ["position", "team", "games", "wins", "draws", "losses",
-             "runs", "goal_diff", "points"]
-        ):
-            col_map[idx] = key
-
-    # Parse data rows.
-    tbody = table.find("tbody")
-    if tbody:
-        rows = tbody.find_all("tr")
-    else:
-        all_rows = table.find_all("tr")
-        rows = all_rows[1:] if skip_first_row else all_rows
-
-    teams: list[dict] = []
-    for row in rows:
-        cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
-        if len(cells) < 3:
+        # Skip matches that have not been played / scored yet.
+        if not isinstance(home_runs, (int, float)) or not isinstance(away_runs, (int, float)):
             continue
 
-        entry: dict = {}
-        for idx, value in enumerate(cells):
-            key = col_map.get(idx)
-            if key is None:
-                continue
-            if key == "position":
-                try:
-                    entry["position"] = int(value)
-                except ValueError:
-                    entry["position"] = None
-            elif key == "team":
-                entry["team"] = value
-            elif key == "runs":
-                # Format may be "25:10" or "25-10"
-                if ":" in value:
-                    parts = value.split(":", 1)
-                elif "-" in value:
-                    parts = value.split("-", 1)
-                else:
-                    parts = [value, "0"]
-                try:
-                    entry["runs_for"] = int(parts[0])
-                    entry["runs_against"] = int(parts[1])
-                except (ValueError, IndexError):
-                    entry["runs_for"] = 0
-                    entry["runs_against"] = 0
-            elif key == "goal_diff":
-                try:
-                    entry["goal_diff"] = int(value.replace("+", ""))
-                except ValueError:
-                    entry["goal_diff"] = None
-            else:
-                # Numeric field: games, wins, draws, losses, points
-                try:
-                    entry[key] = int(value)
-                except ValueError:
-                    entry[key] = None
+        home_name: str = match.get("home_team_name") or ""
+        away_name: str = match.get("away_team_name") or ""
+        if not home_name or not away_name:
+            continue
 
-        # Only add rows that have at minimum a team name.
-        if entry.get("team"):
-            # Derive goal_diff from runs if not provided by its own column.
-            if "goal_diff" not in entry and "runs_for" in entry and "runs_against" in entry:
-                runs_for = entry.get("runs_for") or 0
-                runs_against = entry.get("runs_against") or 0
-                entry["goal_diff"] = runs_for - runs_against
-            # Fill missing numeric fields with None to keep schema stable.
-            for field in ("position", "games", "wins", "draws", "losses",
-                          "runs_for", "runs_against", "goal_diff", "points"):
-                entry.setdefault(field, None)
-            teams.append(entry)
+        for name in (home_name, away_name):
+            if name not in standings:
+                standings[name] = {
+                    "team": name,
+                    "games": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "runs_for": 0,
+                    "runs_against": 0,
+                }
 
-    return teams
+        standings[home_name]["games"] += 1
+        standings[away_name]["games"] += 1
+        standings[home_name]["runs_for"] += int(home_runs)
+        standings[home_name]["runs_against"] += int(away_runs)
+        standings[away_name]["runs_for"] += int(away_runs)
+        standings[away_name]["runs_against"] += int(home_runs)
+
+        if home_runs > away_runs:
+            standings[home_name]["wins"] += 1
+            standings[away_name]["losses"] += 1
+        else:
+            standings[away_name]["wins"] += 1
+            standings[home_name]["losses"] += 1
+
+    table: list[dict] = []
+    for entry in standings.values():
+        entry["run_diff"] = entry["runs_for"] - entry["runs_against"]
+        entry["points"] = entry["wins"] * 2
+        table.append(entry)
+
+    table.sort(key=lambda e: (-e["points"], -e["run_diff"]))
+    for position, entry in enumerate(table, 1):
+        entry["position"] = position
+
+    return table
 
 
 class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
-    """Coordinator that fetches and parses the BBSV league table."""
+    """Coordinator that fetches match data from the BSM API and computes standings."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the coordinator."""
@@ -169,23 +106,28 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
         return self._league_id
 
     async def _async_update_data(self) -> list[dict]:
-        """Fetch and parse data from the BBSV website."""
-        url = f"{BASE_URL}?bsm_league={self._league_id}"
+        """Fetch match data from the BSM API and return computed standings."""
+        params = {"compact": "true", "league_id": self._league_id}
         session = async_get_clientsession(self.hass)
         try:
-            async with session.get(url, timeout=30) as response:
+            async with session.get(API_URL, params=params, timeout=30) as response:
                 response.raise_for_status()
-                html = await response.text()
+                matches: list[dict] = await response.json()
         except Exception as exc:
             raise UpdateFailed(
-                f"Error fetching BBSV league table for league {self._league_id}: {exc}"
+                f"Error fetching BSM match data for league {self._league_id}: {exc}"
             ) from exc
 
-        teams = _parse_table(html)
-        if not teams:
-            _LOGGER.warning(
-                "No table data found for BBSV league %s at %s",
-                self._league_id,
-                url,
+        if not isinstance(matches, list):
+            raise UpdateFailed(
+                f"Unexpected response format from BSM API for league {self._league_id}"
             )
-        return teams
+
+        standings = _compute_standings(matches)
+        if not standings:
+            _LOGGER.warning(
+                "No standings could be computed for BSM league %s "
+                "(no completed matches found)",
+                self._league_id,
+            )
+        return standings

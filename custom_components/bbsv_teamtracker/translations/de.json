@@ -11,8 +11,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zu bbsv.de fehlgeschlagen. Bitte prüfe deine Internetverbindung.",
-      "empty_table": "Die Liga-ID wurde akzeptiert, aber es wurden keine Tabellendaten gefunden. Bitte überprüfe die Liga-ID."
+      "cannot_connect": "Verbindung zur BSM API fehlgeschlagen. Bitte prüfe deine Internetverbindung.",
+      "empty_table": "Die Liga-ID wurde akzeptiert, aber es wurden keine abgeschlossenen Spiele gefunden. Bitte überprüfe die Liga-ID."
     },
     "abort": {
       "already_configured": "Diese Liga ist bereits konfiguriert."

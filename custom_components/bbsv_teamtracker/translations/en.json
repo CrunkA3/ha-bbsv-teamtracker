@@ -11,8 +11,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to bbsv.de. Please check your internet connection and try again.",
-      "empty_table": "The league ID was accepted but no table data was found. Please verify the league ID."
+      "cannot_connect": "Cannot connect to the BSM API. Please check your internet connection and try again.",
+      "empty_table": "The league ID was accepted but no completed matches were found. Please verify the league ID."
     },
     "abort": {
       "already_configured": "This league is already configured."

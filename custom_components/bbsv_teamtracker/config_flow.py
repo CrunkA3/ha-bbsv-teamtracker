@@ -12,7 +12,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
-    BASE_URL,
+    API_URL,
     CONF_LEAGUE_ID,
     CONF_NAME,
     CONF_SCAN_INTERVAL,
@@ -20,23 +20,25 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
-from .coordinator import _parse_table
+from .coordinator import _compute_standings
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def _validate_league(hass, league_id: str) -> list | None:
-    """Try to fetch the league table and return parsed rows or None on error."""
-    url = f"{BASE_URL}?bsm_league={league_id}"
+    """Try to fetch matches for the league and return computed standings or None on error."""
+    params = {"compact": "true", "league_id": league_id}
     session = async_get_clientsession(hass)
     try:
-        async with session.get(url, timeout=15) as response:
+        async with session.get(API_URL, params=params, timeout=15) as response:
             if response.status != 200:
                 return None
-            html = await response.text()
+            matches = await response.json()
     except Exception:  # noqa: BLE001
         return None
-    return _parse_table(html)
+    if not isinstance(matches, list):
+        return None
+    return _compute_standings(matches)
 
 
 class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):

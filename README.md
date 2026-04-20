@@ -2,14 +2,15 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-A [Home Assistant](https://www.home-assistant.io/) custom integration that fetches and exposes the **league table** from the Bayerischer Basketball-Verband (BBSV) website.
+A [Home Assistant](https://www.home-assistant.io/) custom integration that fetches match results from the BSM API and computes the **league standings** for any Bayerischer Baseball/Softball-Verband (BBSV) league.
 
 ## Features
 
-- Fetches the league table from `https://www.bbsv.de/spielbetrieb/tabelle/?bsm_league=<ID>`
+- Fetches match data from `https://bsm.baseball-softball.de/matches.json?compact=true&league_id=<ID>`
+- Computes standings from completed match results (wins, losses, runs, points)
 - Exposes one sensor per configured league:
-  - **State**: number of teams in the table
-  - **Attributes**: full table as a list, configurable update interval, last-updated timestamp
+  - **State**: number of teams in the standings
+  - **Attributes**: full standings table, last-updated timestamp
 - Configurable via the Home Assistant UI (no YAML required)
 - Supports multiple leagues simultaneously
 - German and English UI translations
@@ -32,7 +33,7 @@ A [Home Assistant](https://www.home-assistant.io/) custom integration that fetch
 
 1. Go to **Settings** → **Devices & Services** → **Add Integration**
 2. Search for **BBSV Teamtracker**
-3. Enter your **League ID** (the `bsm_league` parameter from the BBSV URL, e.g. `12345`)
+3. Enter your **League ID** (the numeric BSM league ID, e.g. `12345`)
 4. Optionally give the sensor a custom name
 5. Click **Submit**
 
@@ -44,13 +45,13 @@ Navigate to the league table on the BBSV website and look at the URL:
 https://www.bbsv.de/spielbetrieb/tabelle/?bsm_league=<YOUR_LEAGUE_ID>
 ```
 
-Copy the numeric value after `bsm_league=`.
+Copy the numeric value after `bsm_league=`. That is the same ID used by the BSM API.
 
 ## Sensor Attributes
 
 | Attribute | Description |
 |---|---|
-| `league_id` | The configured BBSV league ID |
+| `league_id` | The configured BSM league ID |
 | `table` | List of team entries (see below) |
 | `last_updated` | ISO 8601 timestamp of the last successful fetch |
 
@@ -58,16 +59,15 @@ Copy the numeric value after `bsm_league=`.
 
 | Field | Description |
 |---|---|
-| `position` | Rank in the table |
-| `team` | Team / club name |
+| `position` | Rank in the standings |
+| `team` | Team name |
 | `games` | Matches played |
 | `wins` | Wins |
-| `draws` | Draws |
 | `losses` | Losses |
 | `runs_for` | Runs scored |
 | `runs_against` | Runs conceded |
-| `goal_diff` | Goal difference |
-| `points` | Points |
+| `run_diff` | Run differential (runs_for − runs_against) |
+| `points` | Points (2 per win) |
 
 ## Options
 
