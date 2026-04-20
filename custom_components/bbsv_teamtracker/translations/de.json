@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BBSV Teamtracker",
+        "description": "Gib deine BBSV-Liga-ID ein, um die Tabelle zu verfolgen.",
+        "data": {
+          "league_id": "Liga-ID (bsm_league)",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zu bbsv.de fehlgeschlagen. Bitte prüfe deine Internetverbindung.",
+      "empty_table": "Die Liga-ID wurde akzeptiert, aber es wurden keine Tabellendaten gefunden. Bitte überprüfe die Liga-ID."
+    },
+    "abort": {
+      "already_configured": "Diese Liga ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BBSV Teamtracker Optionen",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (Sekunden)"
+        }
+      }
+    }
+  }
+}
