@@ -121,7 +121,11 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None and self._leagues_fetched:
-            self._selected_league_id = user_input[CONF_LEAGUE_ID]
+            selected_league_id = user_input[CONF_LEAGUE_ID]
+            if selected_league_id != self._selected_league_id:
+                self._teams = []
+                self._teams_fetched = False
+            self._selected_league_id = selected_league_id
             return await self.async_step_team()
 
         # Fetch the league list; retry on every display attempt until successful.
