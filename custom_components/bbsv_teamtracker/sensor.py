@@ -14,6 +14,7 @@ from .const import (
     ATTR_LAST_UPDATED,
     ATTR_LEAGUE_ID,
     ATTR_TABLE,
+    ATTR_TEAM_ID,
     CONF_NAME,
     DEFAULT_NAME,
     DOMAIN,
@@ -28,11 +29,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up BBSV Teamtracker sensor from a config entry."""
     coordinator: BBSVTeamtrackerCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([
+    sensors: list = [
         BBSVLeagueTableSensor(coordinator, entry),
         BBSVHomeRunsSensor(coordinator, entry),
         BBSVAwayRunsSensor(coordinator, entry),
-    ])
+    ]
+    if coordinator.team_id:
+        sensors.append(BBSVTeamPositionSensor(coordinator, entry))
+    async_add_entities(sensors)
 
 
 def _device_info(coordinator: BBSVTeamtrackerCoordinator, entry: ConfigEntry) -> DeviceInfo:
@@ -156,6 +160,55 @@ class BBSVAwayRunsSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], SensorEn
             ATTR_LEAGUE_ID: self.coordinator.league_id,
             ATTR_AWAY_RUNS: self.coordinator.total_away_runs,
         }
+        if self.coordinator.last_update_success and self.coordinator.last_updated:
+            attrs[ATTR_LAST_UPDATED] = self.coordinator.last_updated.isoformat()
+        return attrs
+
+
+class BBSVTeamPositionSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], SensorEntity):
+    """Sensor that exposes the tracked team's current position in the league."""
+
+    _attr_icon = "mdi:account-group"
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BBSVTeamtrackerCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        league_id = coordinator.league_id
+        self._attr_unique_id = f"{DOMAIN}_{league_id}_{coordinator.team_id}_position"
+        self._attr_name = "Team Position"
+        self._attr_device_info = _device_info(coordinator, entry)
+
+    def _team_entry(self) -> dict | None:
+        """Return the standings entry for the tracked team, or None."""
+        if not self.coordinator.data:
+            return None
+        team_id = self.coordinator.team_id
+        for row in self.coordinator.data:
+            if row.get("team") == team_id:
+                return row
+        return None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the team's current league position."""
+        row = self._team_entry()
+        return row.get("position") if row else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return the team's full standings row and metadata."""
+        row = self._team_entry()
+        attrs: dict = {
+            ATTR_LEAGUE_ID: self.coordinator.league_id,
+            ATTR_TEAM_ID: self.coordinator.team_id,
+        }
+        if row:
+            attrs.update(row)
         if self.coordinator.last_update_success and self.coordinator.last_updated:
             attrs[ATTR_LAST_UPDATED] = self.coordinator.last_updated.isoformat()
         return attrs

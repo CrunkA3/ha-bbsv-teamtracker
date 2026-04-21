@@ -17,7 +17,7 @@ from .const import (
     CONF_LEAGUE_ID,
     CONF_NAME,
     CONF_SCAN_INTERVAL,
-    DEFAULT_NAME,
+    CONF_TEAM_ID,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -65,6 +65,42 @@ async def _fetch_leagues(hass) -> list[dict] | None:
     return leagues
 
 
+async def _fetch_teams(hass, league_id: str) -> list[dict] | None:
+    """Fetch all matches for a league and return a sorted list of unique team names.
+
+    Each entry is a dict with ``id`` (str) and ``name`` (str).
+    Returns ``None`` when the request fails.
+    """
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(
+            API_URL,
+            params={"compact": "true", "league_id": league_id},
+            timeout=15,
+        ) as response:
+            if response.status != 200:
+                return None
+            matches = await response.json()
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Error fetching team list from BSM API")
+        return None
+
+    if not isinstance(matches, list):
+        return None
+
+    seen: set[str] = set()
+    teams: list[dict] = []
+    for match in matches:
+        for key in ("home_team_name", "away_team_name"):
+            team_name = match.get(key)
+            if team_name and isinstance(team_name, str) and team_name not in seen:
+                seen.add(team_name)
+                teams.append({"id": team_name, "name": team_name})
+
+    teams.sort(key=lambda x: x["name"])
+    return teams
+
+
 class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the initial setup config flow."""
 
@@ -74,29 +110,19 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize config flow."""
         self._leagues: list[dict] = []
         self._leagues_fetched: bool = False
+        self._selected_league_id: str = ""
+        self._teams: list[dict] = []
+        self._teams_fetched: bool = False
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the user step."""
+        """Handle the first step: league selection."""
         errors: dict[str, str] = {}
 
         if user_input is not None and self._leagues_fetched:
-            league_id = user_input[CONF_LEAGUE_ID]
-            name = user_input.get(CONF_NAME, "").strip() or f"{DEFAULT_NAME} {league_id}"
-
-            # Prevent duplicate entries for the same league ID.
-            await self.async_set_unique_id(f"{DOMAIN}_{league_id}")
-            self._abort_if_unique_id_configured()
-
-            return self.async_create_entry(
-                title=name,
-                data={
-                    CONF_LEAGUE_ID: league_id,
-                    CONF_NAME: name,
-                    CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-                },
-            )
+            self._selected_league_id = user_input[CONF_LEAGUE_ID]
+            return await self.async_step_team()
 
         # Fetch the league list; retry on every display attempt until successful.
         if not self._leagues_fetched:
@@ -123,7 +149,6 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
                             mode=selector.SelectSelectorMode.LIST,
                         )
                     ),
-                    vol.Optional(CONF_NAME): str,
                 }
             )
         else:
@@ -133,6 +158,68 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
             schema = vol.Schema({})
         return self.async_show_form(
             step_id="user",
+            data_schema=schema,
+            errors=errors,
+        )
+
+    async def async_step_team(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the second step: team selection."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None and self._teams_fetched:
+            team_id = user_input[CONF_TEAM_ID]
+            name = user_input.get(CONF_NAME, "").strip() or team_id
+
+            # Prevent duplicate entries for the same league + team combination.
+            await self.async_set_unique_id(
+                f"{DOMAIN}_{self._selected_league_id}_{team_id}"
+            )
+            self._abort_if_unique_id_configured()
+
+            return self.async_create_entry(
+                title=name,
+                data={
+                    CONF_LEAGUE_ID: self._selected_league_id,
+                    CONF_TEAM_ID: team_id,
+                    CONF_NAME: name,
+                    CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+                },
+            )
+
+        # Fetch the team list for the selected league; retry until successful.
+        if not self._teams_fetched:
+            teams = await _fetch_teams(self.hass, self._selected_league_id)
+            if teams is None:
+                errors["base"] = "cannot_connect"
+            elif not teams:
+                errors["base"] = "no_teams_found"
+            else:
+                self._teams_fetched = True
+                self._teams = teams
+
+        if self._teams_fetched:
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_TEAM_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=team["id"], label=team["name"]
+                                )
+                                for team in self._teams
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    ),
+                    vol.Optional(CONF_NAME): str,
+                }
+            )
+        else:
+            schema = vol.Schema({})
+        return self.async_show_form(
+            step_id="team",
             data_schema=schema,
             errors=errors,
         )
