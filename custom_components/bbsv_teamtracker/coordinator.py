@@ -108,10 +108,15 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
         self.last_updated: datetime | None = None
         self.total_home_runs: int = 0
         self.total_away_runs: int = 0
+        coordinator_name = (
+            f"{DOMAIN}_{self._league_id}_{self._team_id}"
+            if self._team_id
+            else f"{DOMAIN}_{self._league_id}"
+        )
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_{self._league_id}",
+            name=coordinator_name,
             update_interval=timedelta(seconds=scan_interval),
         )
 
@@ -122,7 +127,7 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
 
     @property
     def team_id(self) -> str:
-        """Return the configured team ID (team name)."""
+        """Return the configured team name used as the team identifier."""
         return self._team_id
 
     async def _async_update_data(self) -> list[dict]:

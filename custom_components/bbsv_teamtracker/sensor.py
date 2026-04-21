@@ -40,10 +40,10 @@ async def async_setup_entry(
 
 
 def _device_info(coordinator: BBSVTeamtrackerCoordinator, entry: ConfigEntry) -> DeviceInfo:
-    """Return shared DeviceInfo for all sensors belonging to this league entry."""
+    """Return shared DeviceInfo for all sensors belonging to this config entry."""
     user_name: str = entry.data.get(CONF_NAME, DEFAULT_NAME)
     return DeviceInfo(
-        identifiers={(DOMAIN, coordinator.league_id)},
+        identifiers={(DOMAIN, entry.entry_id)},
         name=user_name,
         manufacturer="BBSV",
         model="Team Tracker",
