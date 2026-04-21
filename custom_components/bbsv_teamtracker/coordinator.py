@@ -13,6 +13,7 @@ from .const import (
     API_URL,
     CONF_LEAGUE_ID,
     CONF_SCAN_INTERVAL,
+    CONF_TEAM_ID,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -99,6 +100,7 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the coordinator."""
         self._league_id: str = entry.data[CONF_LEAGUE_ID]
+        self._team_id: str = entry.data.get(CONF_TEAM_ID, "")
         scan_interval: int = entry.options.get(
             CONF_SCAN_INTERVAL,
             entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
@@ -106,10 +108,15 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
         self.last_updated: datetime | None = None
         self.total_home_runs: int = 0
         self.total_away_runs: int = 0
+        coordinator_name = (
+            f"{DOMAIN}_{self._league_id}_{self._team_id}"
+            if self._team_id
+            else f"{DOMAIN}_{self._league_id}"
+        )
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_{self._league_id}",
+            name=coordinator_name,
             update_interval=timedelta(seconds=scan_interval),
         )
 
@@ -117,6 +124,11 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
     def league_id(self) -> str:
         """Return the configured league ID."""
         return self._league_id
+
+    @property
+    def team_id(self) -> str:
+        """Return the configured team name used as the team identifier."""
+        return self._team_id
 
     async def _async_update_data(self) -> list[dict]:
         """Fetch match data from the BSM API and return computed standings."""

@@ -5,17 +5,25 @@
         "title": "BBSV Teamtracker",
         "description": "Select the league you want to track.",
         "data": {
-          "league_id": "League",
+          "league_id": "League"
+        }
+      },
+      "team": {
+        "title": "BBSV Teamtracker",
+        "description": "Select the team you want to track.",
+        "data": {
+          "team_id": "Team",
           "name": "Name"
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to the BSM API. Please check your internet connection and try again.",
-      "no_leagues_found": "No leagues were found. Please try again later."
+      "no_leagues_found": "No leagues were found. Please try again later.",
+      "no_teams_found": "No teams were found for the selected league. Please try again later."
     },
     "abort": {
-      "already_configured": "This league is already configured."
+      "already_configured": "This team is already configured."
     }
   },
   "options": {

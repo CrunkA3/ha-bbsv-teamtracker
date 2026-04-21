@@ -3,6 +3,7 @@
 DOMAIN = "bbsv_teamtracker"
 
 CONF_LEAGUE_ID = "league_id"
+CONF_TEAM_ID = "team_id"
 CONF_NAME = "name"
 CONF_SCAN_INTERVAL = "scan_interval"
 
@@ -15,6 +16,7 @@ API_URL = "https://bsm.baseball-softball.de/matches.json"
 # Attribute names exposed on the sensor
 ATTR_TABLE = "table"
 ATTR_LEAGUE_ID = "league_id"
+ATTR_TEAM_ID = "team_id"
 ATTR_LAST_UPDATED = "last_updated"
 ATTR_HOME_RUNS = "home_runs"
 ATTR_AWAY_RUNS = "away_runs"
