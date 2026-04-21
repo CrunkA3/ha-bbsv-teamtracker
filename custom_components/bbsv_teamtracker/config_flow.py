@@ -40,6 +40,7 @@ async def _fetch_leagues(hass) -> list[dict] | None:
                 return None
             matches = await response.json()
     except Exception:  # noqa: BLE001
+        _LOGGER.exception("Error fetching league list from BSM API")
         return None
 
     if not isinstance(matches, list):
@@ -102,10 +103,11 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
             leagues = await _fetch_leagues(self.hass)
             if leagues is None:
                 errors["base"] = "cannot_connect"
-                leagues = []
+            elif not leagues:
+                errors["base"] = "no_leagues_found"
             else:
                 self._leagues_fetched = True
-            self._leagues = leagues
+                self._leagues = leagues
 
         schema = vol.Schema(
             {
