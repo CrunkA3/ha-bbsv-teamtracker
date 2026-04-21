@@ -3,16 +3,16 @@
     "step": {
       "user": {
         "title": "BBSV Teamtracker",
-        "description": "Enter your BBSV league ID to start tracking the league table.",
+        "description": "Select the league you want to track.",
         "data": {
-          "league_id": "League ID (bsm_league)",
+          "league_id": "League",
           "name": "Name"
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to the BSM API. Please check your internet connection and try again.",
-      "empty_table": "The league ID was accepted but no completed matches were found. Please verify the league ID."
+      "no_leagues_found": "No leagues were found. Please try again later."
     },
     "abort": {
       "already_configured": "This league is already configured."

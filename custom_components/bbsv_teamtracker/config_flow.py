@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
@@ -20,25 +21,48 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
-from .coordinator import _compute_standings
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def _validate_league(hass, league_id: str) -> list | None:
-    """Try to fetch matches for the league and return computed standings or None on error."""
-    params = {"compact": "true", "league_id": league_id}
+async def _fetch_leagues(hass) -> list[dict] | None:
+    """Fetch all matches and return a sorted list of unique leagues.
+
+    Each entry is a dict with ``id`` (str) and ``name`` (str).
+    Returns ``None`` when the request fails.
+    """
     session = async_get_clientsession(hass)
     try:
-        async with session.get(API_URL, params=params, timeout=15) as response:
+        async with session.get(
+            API_URL, params={"compact": "true"}, timeout=15
+        ) as response:
             if response.status != 200:
                 return None
             matches = await response.json()
     except Exception:  # noqa: BLE001
+        _LOGGER.exception("Error fetching league list from BSM API")
         return None
+
     if not isinstance(matches, list):
         return None
-    return _compute_standings(matches)
+
+    seen: set[str] = set()
+    leagues: list[dict] = []
+    for match in matches:
+        league = match.get("league")
+        if not isinstance(league, dict):
+            continue
+        league_id = league.get("id")
+        league_name = league.get("name")
+        if league_id is None or not league_name:
+            continue
+        league_id_str = str(league_id)
+        if league_id_str not in seen:
+            seen.add(league_id_str)
+            leagues.append({"id": league_id_str, "name": league_name})
+
+    leagues.sort(key=lambda x: x["name"])
+    return leagues
 
 
 class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -46,41 +70,67 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Initialize config flow."""
+        self._leagues: list[dict] = []
+        self._leagues_fetched: bool = False
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the user step."""
         errors: dict[str, str] = {}
 
-        if user_input is not None:
-            league_id = user_input[CONF_LEAGUE_ID].strip()
+        if user_input is not None and self._leagues_fetched:
+            league_id = user_input[CONF_LEAGUE_ID]
             name = user_input.get(CONF_NAME, "").strip() or f"{DEFAULT_NAME} {league_id}"
 
             # Prevent duplicate entries for the same league ID.
             await self.async_set_unique_id(f"{DOMAIN}_{league_id}")
             self._abort_if_unique_id_configured()
 
-            teams = await _validate_league(self.hass, league_id)
-            if teams is None:
-                errors["base"] = "cannot_connect"
-            elif not teams:
-                errors[CONF_LEAGUE_ID] = "empty_table"
-            else:
-                return self.async_create_entry(
-                    title=name,
-                    data={
-                        CONF_LEAGUE_ID: league_id,
-                        CONF_NAME: name,
-                        CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-                    },
-                )
+            return self.async_create_entry(
+                title=name,
+                data={
+                    CONF_LEAGUE_ID: league_id,
+                    CONF_NAME: name,
+                    CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+                },
+            )
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_LEAGUE_ID): str,
-                vol.Optional(CONF_NAME): str,
-            }
-        )
+        # Fetch the league list; retry on every display attempt until successful.
+        if not self._leagues_fetched:
+            leagues = await _fetch_leagues(self.hass)
+            if leagues is None:
+                errors["base"] = "cannot_connect"
+            elif not leagues:
+                errors["base"] = "no_leagues_found"
+            else:
+                self._leagues_fetched = True
+                self._leagues = leagues
+
+        if self._leagues_fetched:
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_LEAGUE_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=league["id"], label=league["name"]
+                                )
+                                for league in self._leagues
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    ),
+                    vol.Optional(CONF_NAME): str,
+                }
+            )
+        else:
+            # Leagues not yet available; show an empty form so the user can
+            # submit to trigger a retry without being blocked by a selector
+            # with zero options.
+            schema = vol.Schema({})
         return self.async_show_form(
             step_id="user",
             data_schema=schema,
