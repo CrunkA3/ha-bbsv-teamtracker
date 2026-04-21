@@ -120,7 +120,7 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
                                 )
                                 for league in self._leagues
                             ],
-                            mode=selector.SelectSelectorMode.LIST,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
                     vol.Optional(CONF_NAME): str,
