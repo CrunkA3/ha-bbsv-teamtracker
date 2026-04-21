@@ -81,7 +81,7 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the user step."""
         errors: dict[str, str] = {}
 
-        if user_input is not None:
+        if user_input is not None and self._leagues_fetched:
             league_id = user_input[CONF_LEAGUE_ID]
             name = user_input.get(CONF_NAME, "").strip() or f"{DEFAULT_NAME} {league_id}"
 
@@ -109,22 +109,28 @@ class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._leagues_fetched = True
                 self._leagues = leagues
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_LEAGUE_ID): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            selector.SelectOptionDict(
-                                value=league["id"], label=league["name"]
-                            )
-                            for league in self._leagues
-                        ],
-                        mode=selector.SelectSelectorMode.LIST,
-                    )
-                ),
-                vol.Optional(CONF_NAME): str,
-            }
-        )
+        if self._leagues_fetched:
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_LEAGUE_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=league["id"], label=league["name"]
+                                )
+                                for league in self._leagues
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    ),
+                    vol.Optional(CONF_NAME): str,
+                }
+            )
+        else:
+            # Leagues not yet available; show an empty form so the user can
+            # submit to trigger a retry without being blocked by a selector
+            # with zero options.
+            schema = vol.Schema({})
         return self.async_show_form(
             step_id="user",
             data_schema=schema,
