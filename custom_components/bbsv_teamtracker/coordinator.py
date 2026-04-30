@@ -1,17 +1,21 @@
-"""DataUpdateCoordinator for BBSV Teamtracker."""
+"""Config flow for BBSV Teamtracker integration."""
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     API_URL,
     CONF_LEAGUE_ID,
+    CONF_NAME,
     CONF_SCAN_INTERVAL,
     CONF_TEAM_ID,
     DEFAULT_SCAN_INTERVAL,
@@ -21,141 +25,239 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _compute_standings(matches: list[dict]) -> tuple[list[dict], int, int]:
-    """Compute a standings table from a list of BSM match dicts.
+async def _fetch_leagues(hass) -> list[dict] | None:
+    """Fetch all matches and return a sorted list of unique leagues.
 
-    Only matches where both ``home_runs`` and ``away_runs`` are numeric values
-    (i.e. the game has been played and scored) are counted.
-
-    Returns a tuple of:
-    - list of team dicts with canonical keys:
-      position, team, games, wins, losses, runs_for, runs_against, run_diff,
-      points – sorted by points (desc) then run_diff (desc).
-    - total home runs across all completed matches
-    - total away runs across all completed matches
+    Each entry is a dict with ``id`` (str) and ``name`` (str).
+    Returns ``None`` when the request fails.
     """
-    standings: dict[str, dict] = {}
-    total_home_runs: int = 0
-    total_away_runs: int = 0
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(
+            API_URL, params={"compact": "true"}, timeout=15
+        ) as response:
+            if response.status != 200:
+                return None
+            matches = await response.json()
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Error fetching league list from BSM API")
+        return None
 
+    if not isinstance(matches, list):
+        return None
+
+    seen: set[str] = set()
+    leagues: list[dict] = []
     for match in matches:
-        home_runs = match.get("home_runs")
-        away_runs = match.get("away_runs")
-
-        # Skip matches that have not been played / scored yet.
-        if not isinstance(home_runs, (int, float)) or not isinstance(away_runs, (int, float)):
+        league = match.get("league")
+        if not isinstance(league, dict):
             continue
-
-        home_name: str = match.get("home_team_name") or ""
-        away_name: str = match.get("away_team_name") or ""
-        if not home_name or not away_name:
+        league_id = league.get("id")
+        league_name = league.get("name")
+        if league_id is None or not league_name:
             continue
+        league_id_str = str(league_id)
+        if league_id_str not in seen:
+            seen.add(league_id_str)
+            leagues.append({"id": league_id_str, "name": league_name})
 
-        total_home_runs += int(home_runs)
-        total_away_runs += int(away_runs)
+    leagues.sort(key=lambda x: x["name"])
+    return leagues
 
-        for name in (home_name, away_name):
-            if name not in standings:
-                standings[name] = {
-                    "team": name,
-                    "games": 0,
-                    "wins": 0,
-                    "losses": 0,
-                    "runs_for": 0,
-                    "runs_against": 0,
+
+async def _fetch_teams(hass, league_id: str) -> list[dict] | None:
+    """Fetch all matches for a league and return a sorted list of unique team names.
+
+    Each entry is a dict with ``id`` (str) and ``name`` (str).
+    Returns ``None`` when the request fails.
+    """
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(
+            API_URL,
+            params={"compact": "true", "league_id": league_id},
+            timeout=15,
+        ) as response:
+            if response.status != 200:
+                return None
+            matches = await response.json()
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Error fetching team list from BSM API")
+        return None
+
+    if not isinstance(matches, list):
+        return None
+
+    seen: set[str] = set()
+    teams: list[dict] = []
+    for match in matches:
+        for key in ("home_team_name", "away_team_name"):
+            team_name = match.get(key)
+            if team_name and isinstance(team_name, str) and team_name not in seen:
+                seen.add(team_name)
+                teams.append({"id": team_name, "name": team_name})
+
+    teams.sort(key=lambda x: x["name"])
+    return teams
+
+
+class BBSVTeamtrackerConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Handle the initial setup config flow."""
+
+    VERSION = 1
+
+    def __init__(self) -> None:
+        """Initialize config flow."""
+        self._leagues: list[dict] = []
+        self._leagues_fetched: bool = False
+        self._selected_league_id: str = ""
+        self._teams: list[dict] = []
+        self._teams_fetched: bool = False
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the first step: league selection."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None and self._leagues_fetched:
+            selected_league_id = user_input[CONF_LEAGUE_ID]
+            if selected_league_id != self._selected_league_id:
+                self._teams = []
+                self._teams_fetched = False
+            self._selected_league_id = selected_league_id
+            return await self.async_step_team()
+
+        # Fetch the league list; retry on every display attempt until successful.
+        if not self._leagues_fetched:
+            leagues = await _fetch_leagues(self.hass)
+            if leagues is None:
+                errors["base"] = "cannot_connect"
+            elif not leagues:
+                errors["base"] = "no_leagues_found"
+            else:
+                self._leagues_fetched = True
+                self._leagues = leagues
+
+        if self._leagues_fetched:
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_LEAGUE_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=league["id"], label=league["name"]
+                                )
+                                for league in self._leagues
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                 }
+            )
+        else:
+            # Leagues not yet available; show an empty form so the user can
+            # submit to trigger a retry without being blocked by a selector
+            # with zero options.
+            schema = vol.Schema({})
+        return self.async_show_form(
+            step_id="user",
+            data_schema=schema,
+            errors=errors,
+        )
 
-        standings[home_name]["games"] += 1
-        standings[away_name]["games"] += 1
-        standings[home_name]["runs_for"] += int(home_runs)
-        standings[home_name]["runs_against"] += int(away_runs)
-        standings[away_name]["runs_for"] += int(away_runs)
-        standings[away_name]["runs_against"] += int(home_runs)
+    async def async_step_team(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the second step: team selection."""
+        errors: dict[str, str] = {}
 
-        if home_runs > away_runs:
-            standings[home_name]["wins"] += 1
-            standings[away_name]["losses"] += 1
-        elif away_runs > home_runs:
-            standings[away_name]["wins"] += 1
-            standings[home_name]["losses"] += 1
-        # Tied games (e.g. called due to weather) count towards games played
-        # but award no win, no loss, and no points to either side.
+        if user_input is not None and self._teams_fetched:
+            team_id = user_input[CONF_TEAM_ID]
+            name = user_input.get(CONF_NAME, "").strip() or team_id
 
-    table: list[dict] = []
-    for entry in standings.values():
-        entry["run_diff"] = entry["runs_for"] - entry["runs_against"]
-        entry["points"] = entry["wins"] * 2
-        table.append(entry)
+            # Prevent duplicate entries for the same league + team combination.
+            await self.async_set_unique_id(
+                f"{DOMAIN}_{self._selected_league_id}_{team_id}"
+            )
+            self._abort_if_unique_id_configured()
 
-    table.sort(key=lambda e: (-e["points"], -e["run_diff"], -e["runs_for"], e["team"]))
-    for position, entry in enumerate(table, 1):
-        entry["position"] = position
+            return self.async_create_entry(
+                title=name,
+                data={
+                    CONF_LEAGUE_ID: self._selected_league_id,
+                    CONF_TEAM_ID: team_id,
+                    CONF_NAME: name,
+                    CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+                },
+            )
 
-    return table, total_home_runs, total_away_runs
+        # Fetch the team list for the selected league; retry until successful.
+        if not self._teams_fetched:
+            teams = await _fetch_teams(self.hass, self._selected_league_id)
+            if teams is None:
+                errors["base"] = "cannot_connect"
+            elif not teams:
+                errors["base"] = "no_teams_found"
+            else:
+                self._teams_fetched = True
+                self._teams = teams
+
+        if self._teams_fetched:
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_TEAM_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=team["id"], label=team["name"]
+                                )
+                                for team in self._teams
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(CONF_NAME): str,
+                }
+            )
+        else:
+            schema = vol.Schema({})
+        return self.async_show_form(
+            step_id="team",
+            data_schema=schema,
+            errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Return the options flow handler."""
+        return BBSVTeamtrackerOptionsFlow(config_entry)
 
 
-class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
-    """Coordinator that fetches match data from the BSM API and computes standings."""
+class BBSVTeamtrackerOptionsFlow(OptionsFlow):
+    """Handle options (e.g. update interval) for an existing entry."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the coordinator."""
-        self._league_id: str = entry.data[CONF_LEAGUE_ID]
-        self._team_id: str = entry.data.get(CONF_TEAM_ID, "")
-        scan_interval: int = entry.options.get(
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the options step."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_interval: int = self._config_entry.options.get(
             CONF_SCAN_INTERVAL,
-            entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         )
-        self.last_updated: datetime | None = None
-        self.total_home_runs: int = 0
-        self.total_away_runs: int = 0
-        coordinator_name = (
-            f"{DOMAIN}_{self._league_id}_{self._team_id}"
-            if self._team_id
-            else f"{DOMAIN}_{self._league_id}"
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(
+                    int, vol.Range(min=60)
+                ),
+            }
         )
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=coordinator_name,
-            update_interval=timedelta(seconds=scan_interval),
-        )
-
-    @property
-    def league_id(self) -> str:
-        """Return the configured league ID."""
-        return self._league_id
-
-    @property
-    def team_id(self) -> str:
-        """Return the configured team name used as the team identifier."""
-        return self._team_id
-
-    async def _async_update_data(self) -> list[dict]:
-        """Fetch match data from the BSM API and return computed standings."""
-        params = {"compact": "true", "league_id": self._league_id}
-        session = async_get_clientsession(self.hass)
-        try:
-            async with session.get(API_URL, params=params, timeout=30) as response:
-                response.raise_for_status()
-                matches: list[dict] = await response.json()
-        except Exception as exc:
-            raise UpdateFailed(
-                f"Error fetching BSM match data for league {self._league_id}: {exc}"
-            ) from exc
-
-        if not isinstance(matches, list):
-            raise UpdateFailed(
-                f"Unexpected response format from BSM API for league {self._league_id}"
-            )
-
-        standings, total_home_runs, total_away_runs = _compute_standings(matches)
-        if not standings:
-            _LOGGER.warning(
-                "No standings could be computed for BSM league %s "
-                "(no completed matches found)",
-                self._league_id,
-            )
-        self.total_home_runs = total_home_runs
-        self.total_away_runs = total_away_runs
-        self.last_updated = datetime.now(timezone.utc)
-        return standings
+        return self.async_show_form(step_id="init", data_schema=schema)
