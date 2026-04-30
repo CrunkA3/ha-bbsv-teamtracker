@@ -165,6 +165,41 @@ class BBSVAwayRunsSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], SensorEn
         return attrs
 
 
+class BBSVTeamGamesSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], SensorEntity):
+    """Sensor that exposes the number of games of the team."""
+
+    _attr_icon = "mdi:counter"
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BBSVTeamtrackerCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        league_id = coordinator.league_id
+        self._attr_unique_id = f"{DOMAIN}_{league_id}_team_games"
+        self._attr_name = "Team Games"
+        self._attr_device_info = _device_info(coordinator, entry)
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the total number of completed matches."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.team_games
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return metadata."""
+        attrs: dict = {
+            ATTR_LEAGUE_ID: self.coordinator.league_id
+        }
+        if self.coordinator.last_update_success and self.coordinator.last_updated:
+            attrs[ATTR_LAST_UPDATED] = self.coordinator.last_updated.isoformat()
+        return attrs
+
 class BBSVTeamPositionSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], SensorEntity):
     """Sensor that exposes the tracked team's current position in the league."""
 
