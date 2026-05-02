@@ -78,8 +78,7 @@ BSM API (matches.json)
 | Endpoint | Usage |
 |---|---|
 | `https://bsm.baseball-softball.de/matches.json?compact=true` | All matches (used in config flow to build league list) |
-| `https://bsm.baseball-softball.de/matches.json?compact=true&league_id=<ID>` | Matches filtered by league (used in config flow for team list) |
-| `https://bsm.baseball-softball.de/league_groups/{league_id}/matches.json?compact=true` | Matches for a league group (used by the coordinator) |
+| `https://bsm.baseball-softball.de/league_groups/{league_id}/matches.json?compact=true` | Matches filtered by league (used in config flow for team list)  (used by the coordinator) |
 
 Match records include: `home_team_name`, `away_team_name`, `home_runs`, `away_runs`, `league.id`, `league.name`.  
 A match is **completed** when both `home_runs` and `away_runs` are numeric values.
