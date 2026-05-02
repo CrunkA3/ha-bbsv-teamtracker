@@ -15,6 +15,8 @@ from .const import (
     ATTR_LEAGUE_ID,
     ATTR_TABLE,
     ATTR_TEAM_ID,
+    ATTR_TEAM_WINS,
+    ATTR_TEAM_LOSSES,
     CONF_NAME,
     DEFAULT_NAME,
     DOMAIN,
@@ -37,6 +39,8 @@ async def async_setup_entry(
     ]
     if coordinator.team_id:
         sensors.append(BBSVTeamPositionSensor(coordinator, entry))
+        sensors.append(BBSVTeamWinsSensor(coordinator, entry))
+        sensors.append(BBSVTeamLossesSensor(coordinator, entry))
     async_add_entities(sensors)
 
 
@@ -245,6 +249,84 @@ class BBSVTeamPositionSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], Sens
         }
         if row:
             attrs.update(row)
+        if self.coordinator.last_update_success and self.coordinator.last_updated:
+            attrs[ATTR_LAST_UPDATED] = self.coordinator.last_updated.isoformat()
+        return attrs
+
+
+class BBSVTeamWinsSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], SensorEntity):
+    """Sensor that exposes the number of wins of the tracked team."""
+
+    _attr_icon = "mdi:trophy"
+    _attr_native_unit_of_measurement = "wins"
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BBSVTeamtrackerCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        league_id = coordinator.league_id
+        self._attr_unique_id = f"{DOMAIN}_{league_id}_{coordinator.team_id}_wins"
+        self._attr_name = "Team Wins"
+        self._attr_device_info = _device_info(coordinator, entry)
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the number of wins for the tracked team."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.team_wins
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return metadata."""
+        attrs: dict = {
+            ATTR_LEAGUE_ID: self.coordinator.league_id,
+            ATTR_TEAM_ID: self.coordinator.team_id,
+            ATTR_TEAM_WINS: self.coordinator.team_wins,
+        }
+        if self.coordinator.last_update_success and self.coordinator.last_updated:
+            attrs[ATTR_LAST_UPDATED] = self.coordinator.last_updated.isoformat()
+        return attrs
+
+
+class BBSVTeamLossesSensor(CoordinatorEntity[BBSVTeamtrackerCoordinator], SensorEntity):
+    """Sensor that exposes the number of losses of the tracked team."""
+
+    _attr_icon = "mdi:emoticon-sad-outline"
+    _attr_native_unit_of_measurement = "losses"
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BBSVTeamtrackerCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        league_id = coordinator.league_id
+        self._attr_unique_id = f"{DOMAIN}_{league_id}_{coordinator.team_id}_losses"
+        self._attr_name = "Team Losses"
+        self._attr_device_info = _device_info(coordinator, entry)
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the number of losses for the tracked team."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.team_losses
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return metadata."""
+        attrs: dict = {
+            ATTR_LEAGUE_ID: self.coordinator.league_id,
+            ATTR_TEAM_ID: self.coordinator.team_id,
+            ATTR_TEAM_LOSSES: self.coordinator.team_losses,
+        }
         if self.coordinator.last_update_success and self.coordinator.last_updated:
             attrs[ATTR_LAST_UPDATED] = self.coordinator.last_updated.isoformat()
         return attrs

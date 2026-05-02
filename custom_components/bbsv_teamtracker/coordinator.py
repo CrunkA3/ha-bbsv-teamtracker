@@ -110,6 +110,8 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
         self.total_home_runs: int = 0
         self.total_away_runs: int = 0
         self.team_games: int = 0
+        self.team_wins: int = 0
+        self.team_losses: int = 0
         coordinator_name = (
             f"{DOMAIN}_{self._league_id}_{self._team_id}"
             if self._team_id
@@ -161,5 +163,7 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
         self.total_home_runs = total_home_runs
         self.total_away_runs = total_away_runs
         self.team_games = standings[self._team_id]["games"]
+        self.team_wins = standings[self._team_id]["wins"]
+        self.team_losses = standings[self._team_id]["losses"]
         self.last_updated = datetime.now(timezone.utc)
         return table
