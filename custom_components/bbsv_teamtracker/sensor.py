@@ -33,6 +33,7 @@ async def async_setup_entry(
         BBSVLeagueTableSensor(coordinator, entry),
         BBSVHomeRunsSensor(coordinator, entry),
         BBSVAwayRunsSensor(coordinator, entry),
+        BBSVTeamGamesSensor(coordinator, entry)
     ]
     if coordinator.team_id:
         sensors.append(BBSVTeamPositionSensor(coordinator, entry))
