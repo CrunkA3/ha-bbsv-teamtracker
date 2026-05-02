@@ -27,7 +27,7 @@ The integration follows the standard HA custom-integration pattern:
 ### Data flow
 
 ```
-BSM API (matches.json)
+BSM API (/league_groups/{league_id}/matches.json)
     └─► BBSVTeamtrackerCoordinator._async_update_data()
             └─► _compute_standings()  →  table, standings dict, run totals
                     └─► sensors read coordinator.data / coordinator.*
