@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     API_URL,
+    API_URL_LEAGUE,
     CONF_LEAGUE_ID,
     CONF_SCAN_INTERVAL,
     CONF_TEAM_ID,
@@ -21,7 +22,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _compute_standings(matches: list[dict]) -> tuple[list[dict], int, int]:
+def _compute_standings(matches: list[dict]) -> tuple[list[dict], dict[str, dict], int, int]:
     """Compute a standings table from a list of BSM match dicts.
 
     Only matches where both ``home_runs`` and ``away_runs`` are numeric values
@@ -46,8 +47,8 @@ def _compute_standings(matches: list[dict]) -> tuple[list[dict], int, int]:
         if not isinstance(home_runs, (int, float)) or not isinstance(away_runs, (int, float)):
             continue
 
-        home_id: str = match.get("home_league_entry").get("id") or ""
-        away_id: str = match.get("away_league_entry").get("id") or ""
+        home_id: str = match.get("home_team_name") or ""
+        away_id: str = match.get("away_team_name") or ""
         if not home_id or not away_id:
             continue
 
@@ -91,7 +92,7 @@ def _compute_standings(matches: list[dict]) -> tuple[list[dict], int, int]:
     for position, entry in enumerate(table, 1):
         entry["position"] = position
 
-    return table, total_home_runs, total_away_runs
+    return table, standings, total_home_runs, total_away_runs
 
 
 class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
@@ -100,7 +101,7 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the coordinator."""
         self._league_id: str = entry.data[CONF_LEAGUE_ID]
-        self._team_id: str = entry.data.get(CONF_TEAM_ID, "")
+        self._team_id: int = entry.data.get(CONF_TEAM_ID, "")
         scan_interval: int = entry.options.get(
             CONF_SCAN_INTERVAL,
             entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
@@ -133,10 +134,11 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> list[dict]:
         """Fetch match data from the BSM API and return computed standings."""
-        params = {"compact": "true", "league_id": self._league_id}
+        params = {"compact": "true"}
         session = async_get_clientsession(self.hass)
         try:
-            async with session.get(API_URL, params=params, timeout=30) as response:
+            url = API_URL_LEAGUE.replace("{league_id}", self.league_id)
+            async with session.get(url, params=params, timeout=30) as response:
                 response.raise_for_status()
                 matches: list[dict] = await response.json()
         except Exception as exc:
@@ -149,7 +151,7 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
                 f"Unexpected response format from BSM API for league {self._league_id}"
             )
 
-        standings, total_home_runs, total_away_runs = _compute_standings(matches)
+        table, standings, total_home_runs, total_away_runs = _compute_standings(matches)
         if not standings:
             _LOGGER.warning(
                 "No standings could be computed for BSM league %s "
@@ -160,4 +162,4 @@ class BBSVTeamtrackerCoordinator(DataUpdateCoordinator):
         self.total_away_runs = total_away_runs
         self.team_games = standings[self._team_id]["games"]
         self.last_updated = datetime.now(timezone.utc)
-        return standings
+        return table
