@@ -12,6 +12,7 @@ DEFAULT_SCAN_INTERVAL = 3600  # seconds (1 hour)
 
 # BSM JSON API endpoint for match results
 API_URL = "https://bsm.baseball-softball.de/matches.json"
+API_URL_LEAGUE = "https://bsm.baseball-softball.de/league_groups/{league_id}/matches.json?compact=true"
 
 # Attribute names exposed on the sensor
 ATTR_TABLE = "table"
